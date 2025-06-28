@@ -1,220 +1,166 @@
+// app/create-event/page.jsx
 "use client";
-
-import { useState, useEffect } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseEther, formatEther } from 'viem';
-
-// --- ASSUMED IMPORTS ---
-// Make sure these paths are correct for your project structure
-import { contractABI } from '@/lib/abi'; // Your contract's ABI
-import { getContractAddress } from '@/lib/chains'; // A function to get address based on chainId
+import { useState } from 'react';
+import { useAccount, useWriteContract } from 'wagmi';
+import { parseEther } from 'viem';
+import { contractABI } from '@/lib/abi'; // Uses the new ABI
+import { getContractAddress, chainDetails } from '@/lib/chains'; // Uses the new chainDetails
 
 export default function CreateEventPage() {
-  const { address, chainId } = useAccount();
-  const { data: hash, error, isPending, writeContract } = useWriteContract();
-
-  // State for form inputs
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [venue, setVenue] = useState('');
-  const [eventDate, setEventDate] = useState('');
-  const [totalTickets, setTotalTickets] = useState('');
-  const [basePrice, setBasePrice] = useState('');
-  const [metadataURI, setMetadataURI] = useState('');
-
-  // State for calculated stake and form errors
-  const [requiredStake, setRequiredStake] = useState(0n);
-  const [formError, setFormError] = useState('');
+  const { chain } = useAccount();
+  const contractAddress = chain ? getContractAddress(chain.id) : undefined;
   
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    venue: '',
+    eventDate: '',
+    totalTickets: '',
+    basePrice: '',
+  });
+  const [metadataURI, setMetadataURI] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const { writeContractAsync, isPending, error } = useWriteContract();
 
-
-  // --- Stake Calculation Logic (mirrors Solidity) ---
-  useEffect(() => {
-    const calculateStake = () => {
-      if (!basePrice || !totalTickets || Number(totalTickets) <= 0 || Number(basePrice) <= 0) {
-        setRequiredStake(0n);
-        return;
-      }
-      try {
-        const basePriceWei = parseEther(basePrice);
-        const ticketsBigInt = BigInt(totalTickets);
-
-        // Solidity constants as BigInts for precision
-        const PRICE_INCREMENT_BASIS_POINTS = 10n;
-        const BASIS_POINTS = 10000n;
-        const ORGANIZER_STAKE_PERCENT = 10n;
-
-        // Replicate the calculateDynamicPrice function
-        const calculateDynamicPrice = (price, sold) => {
-          return price + (price * sold * PRICE_INCREMENT_BASIS_POINTS) / BASIS_POINTS;
-        };
-
-        // Replicate getRequiredStakeForEvent
-        if (ticketsBigInt === 0n) {
-            setRequiredStake(0n);
-            return;
-        }
-        const firstPrice = calculateDynamicPrice(basePriceWei, 0n);
-        const lastPrice = calculateDynamicPrice(basePriceWei, ticketsBigInt - 1n);
-        const avgPrice = (firstPrice + lastPrice) / 2n;
-        const totalRevenue = avgPrice * ticketsBigInt;
-        const stake = (totalRevenue * ORGANIZER_STAKE_PERCENT) / 100n;
-
-        setRequiredStake(stake);
-      } catch (e) {
-        // Handle cases where basePrice is not a valid number string for parseEther
-        setRequiredStake(0n);
-      }
-    };
-    
-    calculateStake();
-  }, [basePrice, totalTickets]);
-
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setFormError('');
-
-    // --- Form Validation ---
-    if (!name || !description || !venue || !eventDate || !totalTickets || !basePrice || !metadataURI) {
-      setFormError('All fields are required.');
-      return;
-    }
-    const eventTimestamp = Math.floor(new Date(eventDate).getTime() / 1000);
-    if (eventTimestamp <= Math.floor(Date.now() / 1000)) {
-        setFormError('Event date must be in the future.');
-        return;
-    }
-    if (Number(totalTickets) <= 0 || Number(basePrice) <= 0) {
-        setFormError('Tickets and Price must be positive numbers.');
-        return;
-    }
-
-    const contractAddress = getContractAddress(chainId);
-    if (!contractAddress) {
-        setFormError(`Contract not deployed on this network (Chain ID: ${chainId}). Please switch networks.`);
-        return;
-    }
-
-    try {
-        const priceInWei = parseEther(basePrice);
-
-        writeContract({
-            address: contractAddress,
-            abi: contractABI,
-            functionName: 'createEvent',
-            args: [
-                name,
-                description,
-                venue,
-                BigInt(eventTimestamp),
-                BigInt(totalTickets),
-                priceInWei,
-                metadataURI,
-            ],
-            value: requiredStake,
-        });
-    } catch (e) {
-        console.error("Error preparing transaction:", e);
-        setFormError("Failed to prepare transaction. Check console for details.");
-    }
+  const handleInputChange = (e) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+  
+  const handleFileChange = (e) => {
+    setFormData(prev => ({ ...prev, image: e.target.files[0] }));
   };
 
-  return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl">
-      <h1 className="text-4xl font-bold mb-6 text-center text-gray-800">Create a New Event</h1>
+  const handleUploadMetadata = async () => {
+    if (!formData.image || !formData.name) return alert("Please provide an event name and an image to generate metadata.");
+    setIsUploading(true);
+    const uploadData = new FormData();
+    uploadData.append('file', formData.image);
+    uploadData.append('name', formData.name);
+    uploadData.append('description', formData.description);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: uploadData });
+      const data = await res.json();
+      if (!data.success || !data.ipfsUri) throw new Error(data.message || "Failed to get IPFS URI");
+      setMetadataURI(data.ipfsUri);
+      alert(`Metadata uploaded successfully!`);
+    } catch (e) {
+      alert(`Error uploading metadata: ${e.message}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!metadataURI) return alert("Please upload metadata first.");
+    if (!contractAddress || !chain) return alert("Please connect to a supported network.");
+
+    try {
+      const eventDateTimestamp = Math.floor(new Date(formData.eventDate).getTime() / 1000);
+      const basePrice = parseEther(formData.basePrice);
       
-      {!address ? (
-         <div className="text-center bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
-            Please connect your wallet to create an event.
-         </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-6 bg-white p-8 shadow-lg rounded-lg">
-          
-          {/* Form Fields */}
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">Event Name</label>
-            <input type="text" id="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"/>
-          </div>
+      // Get the required stake from our config file, exactly like your friend's code
+      const stakeString = chainDetails[chain.id]?.requiredStake || "0";
+      const requiredStake = parseEther(stakeString);
 
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
-            <textarea id="description" rows={4} value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"/>
-          </div>
-          
-          <div>
-            <label htmlFor="venue" className="block text-sm font-medium text-gray-700">Venue</label>
-            <input type="text" id="venue" value={venue} onChange={(e) => setVenue(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"/>
-          </div>
-          
-          <div>
-            <label htmlFor="eventDate" className="block text-sm font-medium text-gray-700">Event Date and Time</label>
-            <input type="datetime-local" id="eventDate" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"/>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label htmlFor="totalTickets" className="block text-sm font-medium text-gray-700">Total Tickets</label>
-                <input type="number" id="totalTickets" value={totalTickets} onChange={(e) => setTotalTickets(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" min="1" />
-            </div>
-            <div>
-                <label htmlFor="basePrice" className="block text-sm font-medium text-gray-700">Base Price (in ETH)</label>
-                <input type="number" id="basePrice" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" min="0" step="any" />
-            </div>
-          </div>
+      if (requiredStake === 0n) {
+          return alert("Stake amount is zero, cannot create event. Check chain configuration.");
+      }
+      
+      await writeContractAsync({
+        address: contractAddress,
+        abi: contractABI,
+        functionName: 'createEvent',
+        args: [
+          formData.name,
+          formData.description,
+          formData.venue,
+          BigInt(eventDateTimestamp),
+          BigInt(formData.totalTickets),
+          basePrice,
+          metadataURI,
+        ],
+        value: requiredStake,
+      });
 
-          <div>
-            <label htmlFor="metadataURI" className="block text-sm font-medium text-gray-700">Metadata URI</label>
-            <input type="url" id="metadataURI" value={metadataURI} onChange={(e) => setMetadataURI(e.target.value)} placeholder="ipfs://..." className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"/>
-          </div>
+      alert('Event created successfully!');
+      // Reset form
+      setFormData({ name: '', description: '', venue: '', eventDate: '', totalTickets: '', basePrice: '', image: null });
+      setMetadataURI('');
 
-          {/* Stake Information */}
-          <div className="p-4 bg-blue-50 border-l-4 border-blue-400 text-blue-700 rounded-md">
-            <p className="font-bold">Required Organizer Stake</p>
-            <p className="text-lg">{formatEther(requiredStake)} ETH</p>
-            <p className="text-xs mt-1">This stake is calculated based on potential revenue and is returned after the event concludes successfully.</p>
-          </div>
+    } catch (err) {
+      console.error("Error creating event:", err);
+      alert(`Error creating event: ${err.shortMessage || err.message}`);
+    }
+  };
+  
+  const isActionDisabled = !contractAddress || isPending || isUploading;
 
-          {/* Submit Button and Status */}
-          <div>
-            <button 
-              type="submit" 
-              disabled={isPending || requiredStake === 0n} 
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-              {isPending ? 'Confirming in wallet...' : 'Create Event'}
-            </button>
-          </div>
+  return (
+    <div className="bg-gray-800 shadow-md rounded-lg p-6 mb-6 max-w-2xl mx-auto">
+      <h2 className="text-2xl font-bold mb-4 text-white">Create Event</h2>
 
-          {/* Error and Success Messages */}
-          {formError && <p className="text-sm text-red-600 mt-2">{formError}</p>}
-          
-          {isConfirming && <div className="text-center text-gray-600 mt-4">Waiting for transaction confirmation...</div>}
-          
-          {isConfirmed && (
-            <div className="mt-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-md">
-              <p className="font-bold">Success!</p>
-              <p>Your event has been created.</p>
-              <a 
-                href={`${chainId === 11155111 ? 'https://sepolia.etherscan.io/tx/' : 'https://etherscan.io/tx/'}${hash}`} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="text-green-800 hover:underline"
-              >
-                View on Etherscan
-              </a>
-            </div>
-          )}
-
-          {error && (
-            <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md break-words">
-                <p className="font-bold">Transaction Error</p>
-                <p className="text-sm">{(error).shortMessage || error.message}</p>
-            </div>
-          )}
-        </form>
+      {chain && chainDetails[chain.id] && (
+        <div className="mb-4 p-3 bg-yellow-900/50 rounded-md border border-yellow-700">
+          <p className="text-sm text-yellow-300">
+            <strong>Required Stake on {chain.name}:</strong> {chainDetails[chain.id].requiredStake} {chain.nativeCurrency.symbol}
+          </p>
+        </div>
       )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-300">Event Name</label>
+          <input type="text" name="name" value={formData.name} onChange={handleInputChange} required className="input-field" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-300">Description</label>
+          <textarea name="description" value={formData.description} onChange={handleInputChange} required rows={3} className="input-field" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-300">Venue</label>
+          <input type="text" name="venue" value={formData.venue} onChange={handleInputChange} required className="input-field" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-300">Event Date & Time</label>
+          <input type="datetime-local" name="eventDate" value={formData.eventDate} onChange={handleInputChange} required className="input-field" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300">Total Tickets</label>
+            <input type="number" name="totalTickets" value={formData.totalTickets} onChange={handleInputChange} required min="1" className="input-field" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300">Base Price ({chain?.nativeCurrency.symbol || '...'})</label>
+            <input type="text" name="basePrice" value={formData.basePrice} onChange={handleInputChange} required placeholder="e.g., 0.01" className="input-field" />
+          </div>
+        </div>
+        <div>
+            <label className="block text-sm font-medium text-gray-300">Event Image</label>
+            <input type="file" accept="image/*" onChange={handleFileChange} className="file-input" disabled={isActionDisabled} />
+            <button type="button" onClick={handleUploadMetadata} disabled={isActionDisabled || !formData.image} className="w-full mt-2 btn-secondary">
+                {isUploading ? "Uploading to IPFS..." : "1. Upload Metadata"}
+            </button>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-300">Metadata URI (Auto-generated)</label>
+          <input type="url" value={metadataURI} placeholder="Auto-generated after upload" className="input-field bg-gray-900" readOnly />
+        </div>
+        <button type="submit" disabled={isActionDisabled || !metadataURI} className="w-full btn-primary">
+          {isPending ? "Confirming Transaction..." : "2. Create Event on Blockchain"}
+        </button>
+        {error && <p className="text-red-500 mt-2 text-center">{error.shortMessage}</p>}
+      </form>
+      <style jsx>{`
+        .input-field { background-color: #2d3748; border: 1px solid #4a5568; color: white; padding: 10px; border-radius: 8px; width: 100%; }
+        .file-input { display: block; width: 100%; padding: 8px; border-radius: 8px; background-color: #2d3748; border: 1px solid #4a5568; }
+        .btn-primary, .btn-secondary { font-bold; padding: 12px; border-radius: 8px; transition: background-color 0.2s; width: 100%; }
+        .btn-primary { background-color: #2b6cb0; color: white; }
+        .btn-primary:hover:not(:disabled) { background-color: #2c5282; }
+        .btn-secondary { background-color: #4a5568; color: white; }
+        .btn-secondary:hover:not(:disabled) { background-color: #2d3748; }
+        :disabled { background-color: #1a202c !important; color: #718096 !important; cursor: not-allowed; }
+      `}</style>
     </div>
   );
 }

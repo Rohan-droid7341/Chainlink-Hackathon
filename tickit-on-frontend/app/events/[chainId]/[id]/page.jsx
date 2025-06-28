@@ -1,10 +1,12 @@
 // app/events/[chainId]/[id]/page.jsx
 "use client";
-import { useState, useEffect } from 'react';
-import { useAccount, useReadContract, useWriteContract, useSwitchChain } from 'wagmi';
-import { parseEther, formatEther } from 'viem';
+import { useState, useEffect, useMemo } from 'react';
+import { useAccount, useReadContract, useWriteContract, useSwitchChain, useConfig } from 'wagmi';
+import { readContract } from '@wagmi/core';
+import { formatEther } from 'viem';
 import { contractABI } from '@/lib/abi';
-import { getContractAddress, chainMap } from '@/lib/chains';
+import { routerAbi } from '@/lib/routerAbi';
+import { getContractAddress, chainMap, chainDetails, ccipRouterAddresses } from '@/lib/chains';
 
 const resolveIpfsUri = (ipfsUri) => {
   if (!ipfsUri || !ipfsUri.startsWith('ipfs://')) return null;
@@ -13,135 +15,173 @@ const resolveIpfsUri = (ipfsUri) => {
 };
 
 export default function EventDetailPage({ params }) {
-  // 1. Get chainId and event id from the URL
   const { chainId: eventChainId, id: eventId } = params;
   
   const { address, chain: connectedChain } = useAccount();
+  const config = useConfig();
   const { switchChain } = useSwitchChain();
   
-  // 2. Determine the correct contract address based on the URL's chainId
-  const contractAddress = getContractAddress(Number(eventChainId));
+  const contractAddressOnTarget = getContractAddress(Number(eventChainId));
+  const contractAddressOnConnected = connectedChain ? getContractAddress(connectedChain.id) : undefined;
   const targetChain = chainMap[Number(eventChainId)];
+  const ccipRouterAddress = connectedChain ? ccipRouterAddresses[connectedChain.id] : undefined;
 
   const [quantity, setQuantity] = useState(1);
   const [eventMetadata, setEventMetadata] = useState(null);
+  const [totalCost, setTotalCost] = useState(null); // Changed to null initially
+  const [isLoadingCost, setIsLoadingCost] = useState(false);
   const { writeContractAsync, isPending, error: writeError } = useWriteContract();
 
-  // 3. Read contract data using the specific chainId and address
-  const { data: event, isLoading: isLoadingEvent } = useReadContract({
-    address: contractAddress,
+  const { data: eventDataArray, isLoading: isLoadingEvent, error: readError } = useReadContract({
+    address: contractAddressOnTarget,
     abi: contractABI,
-    functionName: 'getEvent',
-    args: [BigInt(eventId)],
-    chainId: Number(eventChainId), // Specify the chain to read from
-  });
-
-  const { data: currentPrice, isLoading: isLoadingPrice } = useReadContract({
-    address: contractAddress,
-    abi: contractABI,
-    functionName: 'getCurrentTicketPrice',
+    functionName: 'events',
     args: [BigInt(eventId)],
     chainId: Number(eventChainId),
   });
 
-  useEffect(() => {
-    if (event?.metadataURI) {
-      const fetchMetadata = async () => {
-        try {
-          const response = await fetch(resolveIpfsUri(event.metadataURI));
-          const data = await response.json();
-          setEventMetadata(data);
-        } catch (e) { console.error("Failed to fetch metadata", e); }
-      };
-      fetchMetadata();
+  const event = useMemo(() => {
+    if (!eventDataArray || !Array.isArray(eventDataArray)) return null;
+    return {
+      eventId: eventDataArray[0], organizer: eventDataArray[1], name: eventDataArray[2],
+      description: eventDataArray[3], venue: eventDataArray[4], eventDate: eventDataArray[5],
+      totalTickets: eventDataArray[6], basePrice: eventDataArray[7], ticketsSold: eventDataArray[8],
+      organizerStake: eventDataArray[9], isActive: eventDataArray[10], isCompleted: eventDataArray[11],
+      metadataURI: eventDataArray[12],
+    };
+  }, [eventDataArray]);
+
+  const calculateCosts = async () => {
+    if (!connectedChain || !targetChain || !event || !ccipRouterAddress) {
+        alert("Cannot calculate costs. Please ensure you are connected to a supported network.");
+        return;
+    };
+    
+    setIsLoadingCost(true);
+    setTotalCost(null); // Reset previous calculation
+    console.log("--- Starting Cost Calculation ---");
+    try {
+        let ticketPriceInEth = 0n;
+        for (let i = 0; i < quantity; i++) {
+            ticketPriceInEth += await readContract(config, {
+                address: contractAddressOnTarget, abi: contractABI, functionName: 'calculateDynamicPrice',
+                args: [event.basePrice, event.ticketsSold + BigInt(i)], chainId: Number(eventChainId)
+            });
+        }
+        console.log(`Ticket Price (on Sepolia): ${formatEther(ticketPriceInEth)} ETH`);
+
+        // For this demo, we make a CRITICAL simplification: assume 1 ETH = 1 AVAX.
+        // A production app MUST use a Chainlink Price Feed here to get the correct conversion rate.
+        const ticketPriceInAvax = ticketPriceInEth;
+        console.log(`Assumed Ticket Price (on Fuji): ${formatEther(ticketPriceInAvax)} AVAX`);
+
+        const destinationSelector = BigInt(chainDetails[targetChain.id].ccipChainSelector);
+        const fakeMessage = { receiver: '0x0', data: '0x0', tokenAmounts: [], feeToken: '0x0000000000000000000000000000000000000000', extraArgs: '0x' };
+        
+        const feeInAvax = await readContract(config, {
+            address: ccipRouterAddress, abi: routerAbi, functionName: 'getFee',
+            args: [destinationSelector, fakeMessage]
+        });
+        console.log(`Calculated CCIP fee: ${formatEther(feeInAvax)} AVAX`);
+        
+        setTotalCost({ fee: feeInAvax, ticketPrice: ticketPriceInAvax });
+        console.log("--- Cost Calculation Finished ---");
+
+    } catch (e) {
+        console.error("Error calculating costs:", e);
+        alert("Could not calculate costs. Please refresh and try again.");
+    } finally {
+        setIsLoadingCost(false);
     }
+  };
+
+  useEffect(() => {
+    if (event?.metadataURI) { /* Fetch metadata */ }
   }, [event]);
 
-  const handleBuyTicket = async () => {
-    if (!currentPrice || !address || !contractAddress) return;
-    const totalCost = currentPrice * BigInt(quantity);
+  const handleBuy = async () => {
+    if (!address || !contractAddressOnConnected || !totalCost) {
+        return alert("Costs not calculated yet. Please calculate first.");
+    }
+
+    const isSameChain = connectedChain.id === targetChain.id;
+    const finalValue = totalCost.ticketPrice + totalCost.fee;
     
     try {
       await writeContractAsync({
-        address: contractAddress,
-        abi: contractABI,
-        functionName: 'buyTicket',
-        args: [BigInt(eventId), BigInt(quantity)],
-        value: totalCost,
+        address: contractAddressOnConnected, abi: contractABI,
+        functionName: isSameChain ? 'buyTickets' : 'buyTicketsCrossChain',
+        args: isSameChain 
+            ? [BigInt(eventId), BigInt(quantity)] 
+            : [BigInt(chainDetails[targetChain.id].ccipChainSelector), contractAddressOnTarget, BigInt(eventId), BigInt(quantity)],
+        value: finalValue,
       });
-      alert('Ticket purchased successfully!');
+      alert('Purchase successful/initiated!');
     } catch (err) {
       alert(`Purchase failed: ${err.shortMessage || err.message}`);
     }
   };
 
-  if (isLoadingEvent) return <div className="text-center">Loading event details...</div>;
-  if (!event || !targetChain) return <div className="text-center text-red-500">Event or network not found.</div>;
-  
-  const isCorrectChain = connectedChain?.id === targetChain.id;
-  const imageUrl = eventMetadata ? resolveIpfsUri(eventMetadata.image) : null;
-  const ticketsLeft = Number(event.totalTickets) - Number(event.ticketsSold);
-  
-  // 4. Render the Buy button or a "Switch Network" button
   const PurchaseButton = () => {
-    if (!address) {
-      return <button disabled className="w-full btn-primary">Connect Wallet to Buy</button>;
+    if (!address) return <button disabled className="w-full btn-primary">Connect Wallet to Buy</button>;
+    if (!connectedChain || !contractAddressOnConnected) {
+        return <button onClick={() => switchChain({ chainId: targetChain.id })} className="w-full btn-secondary">Switch to a Supported Network</button>;
     }
-    if (!isCorrectChain) {
-      return (
-        <button 
-          onClick={() => switchChain({ chainId: targetChain.id })} 
-          className="w-full btn-secondary"
-        >
-          Switch to {targetChain.name} to Buy
-        </button>
-      );
+
+    const isSameChain = connectedChain.id === targetChain.id;
+    
+    // Cross-chain flow
+    if (!isSameChain) {
+        if (!totalCost) {
+            return <button onClick={calculateCosts} disabled={isLoadingCost} className="w-full btn-accent">{isLoadingCost ? "Calculating..." : "1. Calculate Cross-Chain Cost"}</button>;
+        }
+        return (
+            <div className="space-y-3">
+                <div className="text-xs text-gray-400 p-3 border border-gray-700 rounded-md space-y-1">
+                    <p>Ticket Price (Est.): {formatEther(totalCost.ticketPrice)} {connectedChain.nativeCurrency.symbol}</p>
+                    <p>CCIP Fee: {formatEther(totalCost.fee)} {connectedChain.nativeCurrency.symbol}</p>
+                    <p className="font-bold border-t border-gray-600 mt-1 pt-1 text-white">Total To Pay: {formatEther(totalCost.ticketPrice + totalCost.fee)} {connectedChain.nativeCurrency.symbol}</p>
+                </div>
+                <button onClick={handleBuy} disabled={isPending} className="w-full btn-accent">{isPending ? "Confirming..." : "2. Pay with AVAX"}</button>
+            </div>
+        );
     }
-    return (
-      <button onClick={handleBuyTicket} disabled={isPending || ticketsLeft < 1} className="w-full btn-primary">
-        {isPending ? "Purchasing..." : `Buy Ticket`}
-      </button>
-    );
+    
+    // Same-chain flow
+    return <button onClick={handleBuy} disabled={isPending} className="w-full btn-primary">Buy on {targetChain.name}</button>;
   };
+
+  if (isLoadingEvent) return <div className="text-center text-lg text-gray-300">Loading Event...</div>;
+  if (!event || !targetChain) return <div className="text-center text-red-500">Event not found.</div>;
+  
+  const ticketsLeft = Number(event.totalTickets) - Number(event.ticketsSold);
 
   return (
     <div className="bg-gray-800 p-8 rounded-lg max-w-4xl mx-auto">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div>
-          {imageUrl ? (
-            <img src={imageUrl} alt={event.name} className="h-80 w-full object-cover bg-gray-700 rounded-lg mb-4"/>
-          ) : (
-            <div className="h-80 bg-gray-700 rounded-lg mb-4 animate-pulse"></div>
-          )}
-          <h1 className="text-4xl font-bold">{event.name}</h1>
-          <p className="text-gray-400 mt-2">{event.venue}</p>
-          <div className="mt-2 text-sm text-yellow-300">This event is hosted on the {targetChain.name} network.</div>
-          <p className="text-gray-300 mt-4">{event.description}</p>
-        </div>
-        <div className="bg-gray-900 p-6 rounded-lg flex flex-col justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold mb-4">Purchase Ticket</h2>
-              <div className="space-y-4">
-                <p><strong>Current Price:</strong> {currentPrice ? `${formatEther(currentPrice)} ${targetChain.nativeCurrency.symbol}` : 'Loading...'}</p>
+        <h1 className="text-4xl font-bold">{event.name}</h1>
+        <p className="mt-2 text-sm text-yellow-300">Hosted on {targetChain.name}</p>
+        <div className="mt-8 bg-gray-900 p-6 rounded-lg">
+            <h2 className="text-2xl font-semibold mb-4">Purchase Ticket</h2>
+            <div className="space-y-4">
                 <p><strong>Tickets Left:</strong> {ticketsLeft}</p>
                 <div className="flex items-center gap-4">
                   <label>Quantity:</label>
-                  <input type="number" value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} min="1" max={ticketsLeft} className="bg-gray-700 w-20 p-2 rounded-md text-center" />
+                  <input type="number" value={quantity} onChange={(e) => { setQuantity(Number(e.target.value)); setTotalCost(null); }} min="1" max={ticketsLeft} className="bg-gray-700 w-20 p-2 rounded-md text-center" />
                 </div>
-              </div>
             </div>
             <div className="mt-6 space-y-3">
               <PurchaseButton />
               {writeError && <p className="text-red-500 text-sm mt-2">{writeError.shortMessage}</p>}
             </div>
         </div>
-      </div>
-       <style jsx>{`
+        <style jsx>{`
         .btn-primary { background-color: #2b6cb0; color: white; }
-        .btn-secondary { background-color: #ca8a04; color: white; } /* Yellow for switch network */
-        .btn-primary, .btn-secondary { font-bold; padding: 12px; border-radius: 8px; transition: background-color 0.2s; }
+        .btn-secondary { background-color: #ca8a04; color: white; }
+        .btn-accent { background-color: #16a34a; color: white; }
+        .btn-primary, .btn-secondary, .btn-accent { font-bold; padding: 12px; border-radius: 8px; transition: background-color 0.2s; }
         .btn-primary:hover:not(:disabled) { background-color: #2c5282; }
         .btn-secondary:hover:not(:disabled) { background-color: #a16207; }
+        .btn-accent:hover:not(:disabled) { background-color: #15803d; }
         :disabled { background-color: #1a202c !important; color: #718096 !important; cursor: not-allowed; }
       `}</style>
     </div>
