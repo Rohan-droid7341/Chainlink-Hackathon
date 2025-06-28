@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { useReadContracts } from 'wagmi';
 import { useMemo } from 'react';
 import { formatEther } from 'viem';
-import { contractABI } from '@/lib/abi';
-import { supportedChains, getContractAddress, chainMap } from '@/lib/chains';
+import { contractABI } from '@/app/lib/abi';
+import { supportedChains, getContractAddress, chainMap } from '@/app/lib/chains';
 
 // A new, smarter EventCard component
 const EventCard = ({ event }) => {
