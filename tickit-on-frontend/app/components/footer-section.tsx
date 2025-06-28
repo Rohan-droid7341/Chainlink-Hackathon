@@ -6,7 +6,7 @@ import { Twitter, DiscIcon as Discord, Github } from "lucide-react"
 export default function FooterSection() {
   return (
     <footer className="bg-card text-muted-foreground py-8 border-t border-border">
-      <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-6">
+      <div className="mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex flex-col items-center md:items-start">
           <p className="text-lg font-bold text-foreground mb-2">Cross-Chain NFT Tickets</p>
           <nav className="flex flex-wrap justify-center md:justify-start gap-x-6 gap-y-2 text-sm">
