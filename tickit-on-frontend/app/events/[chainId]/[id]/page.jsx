@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useAccount, useReadContract, useWriteContract, useSwitchChain } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
-import { contractABI } from '@/lib/abi';
-import { getContractAddress, chainMap } from '@/lib/chains';
+import { contractABI } from '@/app/lib/abi';
+import { getContractAddress, chainMap } from '@/app/lib/chains';
 
 const resolveIpfsUri = (ipfsUri) => {
   if (!ipfsUri || !ipfsUri.startsWith('ipfs://')) return null;

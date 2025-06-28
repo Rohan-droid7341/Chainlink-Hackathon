@@ -3,8 +3,8 @@
 import { useState, useMemo } from 'react';
 import { useAccount, useReadContract, useWriteContract } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
-import { contractABI } from '@/lib/abi';
-import { getContractAddress } from '@/lib/chains';
+import { contractABI } from '@/app/lib/abi';
+import { getContractAddress } from '@/app/lib/chains';
 
 export default function CreateEventPage() {
   const { chain } = useAccount();

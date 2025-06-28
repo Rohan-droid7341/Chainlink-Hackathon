@@ -7,7 +7,7 @@ import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, darkTheme, getDefaultConfig } from '@rainbow-me/rainbowkit';
 
 // Import our centralized chain and project ID config
-import { supportedChains, walletConnectProjectId } from '@/lib/chains';
+import { supportedChains, walletConnectProjectId } from '@/app/lib/chains';
 
 // --- CONFIGURATION IS NOW INSIDE THE CLIENT COMPONENT ---
 const config = getDefaultConfig({
