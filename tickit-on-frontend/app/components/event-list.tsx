@@ -1,146 +1,186 @@
 "use client"
 
-import Image from "next/image"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { motion } from "framer-motion"
-import type { Event } from "../../lib/types"
+import { EnhancedCarousel } from "@/components/ui/enhanced-carousel"
+import { CarouselEventCard } from "@/components/ui/carousel-event-card"
+import { FloatingOrb } from "@/components/ui/floating-orb"
+import { TextReveal } from "@/components/ui/text-reveal"
 
-// Mock data for events
-const mockEvents: Event[] = [
+// Enhanced mock data with dummy image links and descriptions
+const mockEvents = [
   {
     id: "1",
     title: "Decentralized DevCon 2025",
-    banner: "/placeholder.svg?height=300&width=500",
+    banner: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=600&fit=crop",
     organizer: "Web3 Builders DAO",
     date: "Oct 26, 2025",
+    location: "San Francisco, CA",
+    attendees: 2500,
     priceEth: 0.1,
-    priceMatic: 150,
-    priceAvax: 2,
-    network: "ethereum",
+    category: "Technology",
+    rating: 4.9,
+    featured: true,
+    trend: "up" as const,
+    description:
+      "Join the most innovative minds in blockchain technology for three days of cutting-edge presentations, workshops, and networking opportunities that will shape the future of decentralized applications.",
   },
   {
     id: "2",
     title: "Polygon Gaming Summit",
-    banner: "/placeholder.svg?height=300&width=500",
+    banner: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800&h=600&fit=crop",
     organizer: "Metaverse Guild",
     date: "Nov 10, 2025",
+    location: "Austin, TX",
+    attendees: 1800,
     priceEth: 0.05,
-    priceMatic: 75,
-    priceAvax: 1,
-    network: "polygon",
+    category: "Gaming",
+    rating: 4.7,
+    featured: false,
+    trend: "stable" as const,
+    description:
+      "Explore the intersection of gaming and blockchain technology. Discover how NFTs, play-to-earn mechanics, and decentralized gaming economies are revolutionizing the gaming industry.",
   },
   {
     id: "3",
     title: "Avalanche DeFi Day",
-    banner: "/placeholder.svg?height=300&width=500",
+    banner: "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=800&h=600&fit=crop",
     organizer: "Snowflake Labs",
     date: "Dec 5, 2025",
+    location: "New York, NY",
+    attendees: 3200,
     priceEth: 0.08,
-    priceMatic: 120,
-    priceAvax: 1.5,
-    network: "avalanche",
+    category: "Finance",
+    rating: 4.8,
+    featured: true,
+    trend: "up" as const,
+    description:
+      "Dive deep into the world of decentralized finance on Avalanche. Learn about yield farming, liquidity mining, and the latest DeFi protocols that are changing traditional finance.",
   },
   {
     id: "4",
     title: "NFT Art Basel",
-    banner: "/placeholder.svg?height=300&width=500",
+    banner: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop",
     organizer: "Crypto Creatives",
     date: "Jan 15, 2026",
+    location: "Miami, FL",
+    attendees: 5000,
     priceEth: 0.2,
-    priceMatic: 300,
-    priceAvax: 4,
-    network: "ethereum",
+    category: "Art",
+    rating: 4.9,
+    featured: true,
+    trend: "down" as const,
+    description:
+      "Experience the convergence of traditional art and digital innovation. Witness groundbreaking NFT exhibitions, meet renowned digital artists, and explore the future of art ownership.",
+  },
+  {
+    id: "5",
+    title: "Web3 Security Conference",
+    banner: "https://images.unsplash.com/photo-1626338495392-75343d5aa00e?w=800&h=600&fit=crop",
+    organizer: "CyberSafe Alliance",
+    date: "Feb 20, 2026",
+    location: "London, UK",
+    attendees: 1500,
+    priceEth: 0.12,
+    category: "Technology",
+    rating: 4.6,
+    featured: false,
+    trend: "up" as const,
+    description:
+      "Learn from top security experts about protecting blockchain applications, smart contract auditing, and the latest cybersecurity threats in the Web3 ecosystem.",
+  },
+  {
+    id: "6",
+    title: "Metaverse Fashion Week",
+    banner: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=600&fit=crop",
+    organizer: "Digital Fashion House",
+    date: "Mar 12, 2026",
+    location: "Paris, France",
+    attendees: 4200,
+    priceEth: 0.15,
+    category: "Art",
+    rating: 4.8,
+    featured: true,
+    trend: "stable" as const,
+    description:
+      "Step into the future of fashion where digital meets physical. Explore virtual runways, NFT wearables, and the revolutionary impact of blockchain on the fashion industry.",
   },
 ]
 
 export default function EventList() {
-  const getPriceForChain = (event: Event) => {
-    return (
-      <div className="text-sm text-muted-foreground">
-        <span className="font-semibold text-foreground">{event.priceEth} ETH</span> |{" "}
-        <span className="font-semibold text-foreground">{event.priceMatic} MATIC</span> |{" "}
-        <span className="font-semibold text-foreground">{event.priceAvax} AVAX</span>
-      </div>
-    )
-  }
-
   const handleBuyClick = (eventName: string) => {
     console.log(`Redirecting to the page for "${eventName}"... (This is a placeholder action)`)
   }
 
+  const carouselItems = mockEvents.map((event) => ({
+    id: event.id,
+    content: <CarouselEventCard event={event} onBuyClick={handleBuyClick} />,
+  }))
+
   return (
-    <section id="events" className="py-16 bg-background text-foreground">
+    <section id="events" className="py-16 bg-background text-foreground relative overflow-hidden">
+      {/* Floating orbs for ambiance */}
+      <FloatingOrb size="lg" color="blue" className="top-20 left-10 opacity-20" />
+      <FloatingOrb size="md" color="purple" className="top-40 right-20 opacity-15" />
+      <FloatingOrb size="sm" color="pink" className="bottom-20 left-1/4 opacity-25" />
+
       <div className="container mx-auto px-4">
-        <motion.h2
-          className="text-3xl md:text-4xl font-bold text-center mb-12 drop-shadow"
-          initial={{ opacity: 0, y: 30 }}
+        <TextReveal>
+          <motion.h2
+            className="text-3xl md:text-4xl font-bold text-center mb-4 drop-shadow bg-gradient-to-r from-white via-blue-200 to-purple-300 bg-clip-text text-transparent"
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true }}
+          >
+            Featured Events
+          </motion.h2>
+        </TextReveal>
+
+        <TextReveal delay={0.2}>
+          <p className="text-center text-muted-foreground mb-12 text-lg">
+            Discover amazing events across multiple blockchain networks
+          </p>
+        </TextReveal>
+
+        {/* Enhanced Carousel */}
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
           whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: 0.8, delay: 0.3 }}
           viewport={{ once: true }}
+          className="relative"
         >
-          Featured Events
-        </motion.h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {mockEvents.map((event, index) => (
+          <EnhancedCarousel
+            items={carouselItems}
+            autoPlay={true}
+            autoPlayInterval={6000}
+            showDots={true}
+            showArrows={true}
+            className="h-[600px] rounded-2xl overflow-hidden shadow-2xl"
+          />
+        </motion.div>
+
+        {/* Additional Info */}
+        <TextReveal delay={0.5}>
+          <div className="mt-12 text-center">
+            <p className="text-muted-foreground mb-4">Swipe or use arrows to explore more events</p>
             <motion.div
-              key={event.id}
-              initial={{ opacity: 0, y: 60, scale: 0.8 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              whileHover={{ scale: 1.03, y: -5 }}
-              transition={{
-                duration: 0.7,
-                delay: index * 0.15,
-                ease: "easeOut",
-              }}
-              viewport={{ once: true, amount: 0.2 }}
+              className="flex justify-center space-x-4"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              transition={{ delay: 0.7 }}
             >
-              <Card className="bg-card border-border text-foreground overflow-hidden h-full flex flex-col shadow-lg hover:shadow-xl transition-shadow duration-300">
-                <div className="relative w-full h-48">
-                  <Image
-                    src={event.banner || "/placeholder.svg"}
-                    alt={event.title}
-                    layout="fill"
-                    objectFit="cover"
-                    className="rounded-t-lg"
-                  />
-                  <Badge
-                    className={`absolute top-2 right-2 px-3 py-1 rounded-full text-xs font-semibold ${
-                      event.network === "ethereum"
-                        ? "bg-purple-600"
-                        : event.network === "polygon"
-                          ? "bg-blue-600"
-                          : "bg-red-600"
-                    }`}
-                  >
-                    {event.network.charAt(0).toUpperCase() + event.network.slice(1)}
-                  </Badge>
-                </div>
-                <CardHeader className="flex-grow">
-                  <CardTitle className="text-xl font-semibold mb-2">{event.title}</CardTitle>
-                  <p className="text-sm text-muted-foreground mb-1">Organizer: {event.organizer}</p>
-                  <p className="text-sm text-muted-foreground">Date: {event.date}</p>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold">{getPriceForChain(event)}</span>
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <motion.div className="w-full" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                    <Button
-                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transition-all duration-300"
-                      onClick={() => handleBuyClick(event.title)}
-                    >
-                      Buy Ticket
-                    </Button>
-                  </motion.div>
-                </CardFooter>
-              </Card>
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2">
+                <span className="text-sm text-muted-foreground">Total Events: </span>
+                <span className="font-bold text-foreground">{mockEvents.length}</span>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2">
+                <span className="text-sm text-muted-foreground">Featured: </span>
+                <span className="font-bold text-foreground">{mockEvents.filter((e) => e.featured).length}</span>
+              </div>
             </motion.div>
-          ))}
-        </div>
+          </div>
+        </TextReveal>
       </div>
     </section>
   )
