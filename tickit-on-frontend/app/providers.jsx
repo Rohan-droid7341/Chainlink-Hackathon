@@ -5,21 +5,17 @@ import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, darkTheme, getDefaultConfig } from '@rainbow-me/rainbowkit';
-
-// Import our centralized chain and project ID config
 import { supportedChains, walletConnectProjectId } from '@/lib/chains';
 
-// --- CONFIGURATION IS NOW INSIDE THE CLIENT COMPONENT ---
+// DO NOT EXPORT 'config'. It should only live here.
 const config = getDefaultConfig({
   appName: 'TickItOn',
   projectId: walletConnectProjectId,
   chains: supportedChains,
   ssr: true, 
 });
-// --------------------------------------------------------
 
 const customTheme = {
-    // ... (Your custom theme from the previous step remains unchanged)
     ...darkTheme({ overlayBlur: 'small' }),
     colors: {
       ...darkTheme().colors,
