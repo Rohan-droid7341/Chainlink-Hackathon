@@ -2,8 +2,8 @@
 "use client";
 import { useState } from 'react';
 import { useAccount, useReadContract, useWriteContract, useBalance } from 'wagmi';
-import { contractABI } from '@/lib/abi';
-import { getContractAddress } from '@/lib/chains';
+import { contractABI } from '@/app/lib/abi';
+import { getContractAddress } from '@/app/lib/chains';
 import { formatEther } from 'viem';
 
 const TicketCard = ({ ticketId }) => {

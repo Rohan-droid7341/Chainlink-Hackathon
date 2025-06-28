@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, darkTheme, getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { supportedChains, walletConnectProjectId } from '@/lib/chains';
 
 // DO NOT EXPORT 'config'. It should only live here.
 const config = getDefaultConfig({

@@ -4,10 +4,6 @@ import { useState, useEffect } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
 
-// --- ASSUMED IMPORTS ---
-// Make sure these paths are correct for your project structure
-import { contractABI } from '@/lib/abi'; // Your contract's ABI
-import { getContractAddress } from '@/lib/chains'; // A function to get address based on chainId
 
 export default function CreateEventPage() {
   const { address, chainId } = useAccount();
