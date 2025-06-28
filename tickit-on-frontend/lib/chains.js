@@ -3,9 +3,9 @@ import { sepolia, polygonAmoy, avalancheFuji } from 'wagmi/chains';
 
 // Contract addresses remain the same
 export const contractAddresses = {
-  [sepolia.id]: "0xA3f283f74168a3E745BacFd7eE0487C88Ef266Cc",
-  [polygonAmoy.id]: "0x0e935648703fd50B8357b3C73973F6070a3CF267",
-  [avalancheFuji.id]: "0xA60aC24910836A213bbE0f7D59bf356C1Edf716F",
+  [sepolia.id]: "0x6ea14c26Ca3241Dd1d47B1F09C3E68867a2CbdF2",
+  [polygonAmoy.id]: "0x2624B928030f0Be53b68325272cB24a9562B01B6",
+  [avalancheFuji.id]: "0x7B13742e672d18A6a187Ec36E27d793007Dac727",
 };
 
 export const supportedChains = [sepolia, polygonAmoy, avalancheFuji];
