@@ -39,7 +39,6 @@ export default function HowItWorks() {
       {/* Background Gradient Overlays for dark theme consistency with Hero Section */}
       <div className="absolute inset-0 bg-gradient-to-br from-darkblue-950/40 to-darkblue-800/40 z-0"></div>
       <div className="absolute inset-0 bg-radial-gradient-at-center from-darkblue-900/50 to-transparent z-0 animate-fade-in"></div>
-
       <div className="container mx-auto px-4 text-center relative z-10">
         <motion.h2
           className="text-3xl md:text-4xl font-bold mb-12 drop-shadow"
